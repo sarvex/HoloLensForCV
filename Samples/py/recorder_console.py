@@ -43,9 +43,7 @@ def parse_args():
     parser.add_argument("--max_num_frames", type=int, default=-1)
     parser.add_argument("--num_refinements", type=int, default=3)
 
-    args = parser.parse_args()
-
-    return args
+    return parser.parse_args()
 
 
 def mkdir_if_not_exists(path):
@@ -71,7 +69,7 @@ class DevicePortalBrowser(object):
 
     def connect(self, address, username, password):
         print("Connecting to HoloLens Device Portal...")
-        self.url = "http://{}".format(address)
+        self.url = f"http://{address}"
         password_manager = urllib.request.HTTPPasswordMgrWithDefaultRealm()
         password_manager.add_password(None, self.url, username, password)
         handler = urllib.request.HTTPBasicAuthHandler(password_manager)
@@ -84,16 +82,20 @@ class DevicePortalBrowser(object):
         print("Searching for CV: Recorder application...")
 
         response = urllib.request.urlopen(
-            "{}/api/app/packagemanager/packages".format(self.url))
+            f"{self.url}/api/app/packagemanager/packages"
+        )
         packages = json.loads(response.read().decode())
 
-        self.package_full_name = None
-        for package in packages["InstalledPackages"]:
-            if package["Name"] == "CV: Recorder":
-                self.package_full_name = package["PackageFullName"]
-                break
+        self.package_full_name = next(
+            (
+                package["PackageFullName"]
+                for package in packages["InstalledPackages"]
+                if package["Name"] == "CV: Recorder"
+            ),
+            None,
+        )
         assert self.package_full_name is not None, \
-            "CV: Recorder package must be installed on HoloLens"
+                "CV: Recorder package must be installed on HoloLens"
 
         print("=> Found CV: Recorder application with name:",
               self.package_full_name)
@@ -101,25 +103,22 @@ class DevicePortalBrowser(object):
         print("Searching for recordings...")
 
         response = urllib.request.urlopen(
-            "{}/api/filesystem/apps/files?knownfolderid="
-            "LocalAppData&packagefullname={}&path=\\\\TempState".format(
-                self.url, self.package_full_name))
+            f"{self.url}/api/filesystem/apps/files?knownfolderid=LocalAppData&packagefullname={self.package_full_name}&path=\\\\TempState"
+        )
         recordings = json.loads(response.read().decode())
 
         self.recording_names = []
         for recording in recordings["Items"]:
             # Check if the recording contains any file data.
             response = urllib.request.urlopen(
-                "{}/api/filesystem/apps/files?knownfolderid="
-                "LocalAppData&packagefullname={}&path=\\\\TempState\\{}".format(
-                    self.url, self.package_full_name, recording["Id"]))
+                f'{self.url}/api/filesystem/apps/files?knownfolderid=LocalAppData&packagefullname={self.package_full_name}&path=\\\\TempState\\{recording["Id"]}'
+            )
             files = json.loads(response.read().decode())
             if len(files["Items"]) > 0:
                 self.recording_names.append(recording["Id"])
         self.recording_names.sort()
 
-        print("=> Found a total of {} recordings".format(
-              len(self.recording_names)))
+        print(f"=> Found a total of {len(self.recording_names)} recordings")
 
     def list_recordings(self, verbose=True):
         for i, recording_name in enumerate(self.recording_names):
@@ -142,12 +141,11 @@ class DevicePortalBrowser(object):
         recording_path = os.path.join(workspace_path, recording_name)
         mkdir_if_not_exists(recording_path)
 
-        print("Downloading recording {}...".format(recording_name))
+        print(f"Downloading recording {recording_name}...")
 
         response = urllib.request.urlopen(
-            "{}/api/filesystem/apps/files?knownfolderid="
-            "LocalAppData&packagefullname={}&path=\\\\TempState\\{}".format(
-                self.url, self.package_full_name, recording_name))
+            f"{self.url}/api/filesystem/apps/files?knownfolderid=LocalAppData&packagefullname={self.package_full_name}&path=\\\\TempState\\{recording_name}"
+        )
         files = json.loads(response.read().decode())
 
         for file in files["Items"]:
@@ -161,22 +159,20 @@ class DevicePortalBrowser(object):
 
             print("=> Downloading:", file["Id"])
             urllib.request.urlretrieve(
-                "{}/api/filesystem/apps/file?knownfolderid=LocalAppData&" \
-                "packagefullname={}&filename=\\\\TempState\\{}\\{}".format(
-                    self.url, self.package_full_name,
-                    recording_name, file["Id"]), destination_path)
+                f'{self.url}/api/filesystem/apps/file?knownfolderid=LocalAppData&packagefullname={self.package_full_name}&filename=\\\\TempState\\{recording_name}\\{file["Id"]}',
+                destination_path,
+            )
 
     def delete_recording(self, recording_idx):
         recording_name = self.get_recording_name(recording_idx)
         if recording_name is None:
             return
 
-        print("Deleting recording {}...".format(recording_name))
+        print(f"Deleting recording {recording_name}...")
 
         response = urllib.request.urlopen(
-            "{}/api/filesystem/apps/files?knownfolderid="
-            "LocalAppData&packagefullname={}&path=\\\\TempState\\{}".format(
-                self.url, self.package_full_name, recording_name))
+            f"{self.url}/api/filesystem/apps/files?knownfolderid=LocalAppData&packagefullname={self.package_full_name}&path=\\\\TempState\\{recording_name}"
+        )
         files = json.loads(response.read().decode())
 
         for file in files["Items"]:
@@ -184,11 +180,12 @@ class DevicePortalBrowser(object):
                 continue
 
             print("=> Deleting:", file["Id"])
-            urllib.request.urlopen(urllib.request.Request(
-                "{}/api/filesystem/apps/file?knownfolderid=LocalAppData&" \
-                "packagefullname={}&filename=\\\\TempState\\{}\\{}".format(
-                    self.url, self.package_full_name,
-                    recording_name, file["Id"]), method="DELETE"))
+            urllib.request.urlopen(
+                urllib.request.Request(
+                    f'{self.url}/api/filesystem/apps/file?knownfolderid=LocalAppData&packagefullname={self.package_full_name}&filename=\\\\TempState\\{recording_name}\\{file["Id"]}',
+                    method="DELETE",
+                )
+            )
 
         self.recording_names.remove(recording_name)
 
@@ -225,8 +222,9 @@ def read_sensor_poses(path, identity_camera_to_image=False):
 
 
 def read_sensor_images(recording_path, camera_name):
-    image_poses = read_sensor_poses(os.path.join(
-        recording_path, camera_name + ".csv"))
+    image_poses = read_sensor_poses(
+        os.path.join(recording_path, f"{camera_name}.csv")
+    )
 
     image_paths = sorted(glob.glob(
         os.path.join(recording_path, camera_name, "*.pgm")))
@@ -250,12 +248,10 @@ def read_sensor_images(recording_path, camera_name):
 
 
 def synchronize_sensor_frames(args, recording_path, output_path, camera_names):
-    # Collect all sensor frames.
-
-    images = {}
-    for camera_name in camera_names:
-        images[camera_name] = read_sensor_images(recording_path, camera_name)
-
+    images = {
+        camera_name: read_sensor_images(recording_path, camera_name)
+        for camera_name in camera_names
+    }
     # Synchronize the frames based on their time stamps.
 
     ref_image_paths, ref_image_names, ref_time_stamps, ref_image_poses = \
@@ -324,7 +320,7 @@ def synchronize_sensor_frames(args, recording_path, output_path, camera_names):
     sync_frames = []
     sync_poses = []
     for ref_image_name, ref_time_stamp in zip(ref_image_names, ref_time_stamps):
-        image_basename = "{}.pgm".format(ref_time_stamp)
+        image_basename = f"{ref_time_stamp}.pgm"
         frame_images = []
         frame_poses = []
         for image_path, image_name, image_pose in \
@@ -379,7 +375,7 @@ def reconstruct_recording(args, recording_path, dense=True):
     with open(image_list_path, "w") as fid:
         for frame in frames:
             for image_name in frame:
-                fid.write("{}\n".format(image_name))
+                fid.write(f"{image_name}\n")
 
     subprocess.call([
         args.colmap_path, "feature_extractor",
@@ -409,55 +405,53 @@ def reconstruct_recording(args, recording_path, dense=True):
 
     mkdir_if_not_exists(sparse_hololens_path)
 
-    cameras_file = open(os.path.join(sparse_hololens_path, "cameras.txt"), "w")
-    images_file = open(os.path.join(sparse_hololens_path, "images.txt"), "w")
-    points_file = open(os.path.join(sparse_hololens_path, "points3D.txt"), "w")
+    with open(os.path.join(sparse_hololens_path, "cameras.txt"), "w") as cameras_file:
+        images_file = open(os.path.join(sparse_hololens_path, "images.txt"), "w")
+        points_file = open(os.path.join(sparse_hololens_path, "points3D.txt"), "w")
 
-    connection = sqlite3.connect(database_path)
-    cursor = connection.cursor()
+        connection = sqlite3.connect(database_path)
+        cursor = connection.cursor()
 
-    camera_ids = {}
-    for camera_name in camera_names:
-        camera_params_list = \
-            list(map(float, camera_params[camera_name].split()))
-        camera_params_float = np.array(camera_params_list, dtype=np.double)
+        camera_ids = {}
+        for camera_name in camera_names:
+            camera_params_list = \
+                list(map(float, camera_params[camera_name].split()))
+            camera_params_float = np.array(camera_params_list, dtype=np.double)
 
-        cursor.execute("INSERT INTO cameras"
-            "(model, width, height, params, prior_focal_length) "
-            "VALUES(?, ?, ?, ?, ?);",
-            (camera_model_id, camera_width,
-             camera_height, camera_params_float, 1))
+            cursor.execute("INSERT INTO cameras"
+                "(model, width, height, params, prior_focal_length) "
+                "VALUES(?, ?, ?, ?, ?);",
+                (camera_model_id, camera_width,
+                 camera_height, camera_params_float, 1))
 
-        camera_id = cursor.lastrowid
-        camera_ids[camera_name] = camera_id
+            camera_id = cursor.lastrowid
+            camera_ids[camera_name] = camera_id
 
-        cursor.execute("UPDATE images SET camera_id=? "
-                       "WHERE name LIKE '{}%';".format(camera_name),
-                       (camera_id,))
-        connection.commit()
-
-        cameras_file.write("{} {} {} {} {}\n".format(
-            camera_id, camera_model_name,
-            camera_width, camera_height,
-            camera_params[camera_name]))
-
-    for image_names, image_poses in zip(frames, poses):
-        for image_name, image_pose in zip(image_names, image_poses):
-            camera_name = os.path.dirname(image_name)
-            camera_id = camera_ids[camera_name]
             cursor.execute(
-                "SELECT image_id FROM images WHERE name=?;", (image_name,))
-            image_id = cursor.fetchone()[0]
-            qvec = rotmat2qvec(image_pose[:3, :3])
-            tvec = image_pose[:, 3]
-            images_file.write("{} {} {} {} {} {} {} {} {} {}\n\n".format(
-                image_id, qvec[0], qvec[1], qvec[2], qvec[3],
-                tvec[0], tvec[1], tvec[2], camera_id, image_name
-            ))
+                f"UPDATE images SET camera_id=? WHERE name LIKE '{camera_name}%';",
+                (camera_id,),
+            )
+            connection.commit()
 
-    connection.close()
+            cameras_file.write(
+                f"{camera_id} {camera_model_name} {camera_width} {camera_height} {camera_params[camera_name]}\n"
+            )
 
-    cameras_file.close()
+        for image_names, image_poses in zip(frames, poses):
+            for image_name, image_pose in zip(image_names, image_poses):
+                camera_name = os.path.dirname(image_name)
+                camera_id = camera_ids[camera_name]
+                cursor.execute(
+                    "SELECT image_id FROM images WHERE name=?;", (image_name,))
+                image_id = cursor.fetchone()[0]
+                qvec = rotmat2qvec(image_pose[:3, :3])
+                tvec = image_pose[:, 3]
+                images_file.write(
+                    f"{image_id} {qvec[0]} {qvec[1]} {qvec[2]} {qvec[3]} {tvec[0]} {tvec[1]} {tvec[2]} {camera_id} {image_name}\n\n"
+                )
+
+        connection.close()
+
     images_file.close()
     points_file.close()
 

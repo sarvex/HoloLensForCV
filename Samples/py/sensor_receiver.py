@@ -54,7 +54,9 @@ def main(argv):
     try:
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     except (socket.error, msg):
-        print("ERROR: Failed to create socket. Code: " + str(msg[0]) + ', Message: ' + msg[1])
+        print(
+            f"ERROR: Failed to create socket. Code: {str(msg[0])}, Message: {msg[1]}"
+        )
         sys.exit()
 
     print('INFO: socket created')
@@ -62,7 +64,7 @@ def main(argv):
     # Try connecting to the address
     s.connect((args.host, PV_STREAM_PORT))
 
-    print('INFO: Socket Connected to ' + args.host + ' on port ' + str(PV_STREAM_PORT))
+    print(f'INFO: Socket Connected to {args.host} on port {str(PV_STREAM_PORT)}')
 
     # Try receive data
     try:

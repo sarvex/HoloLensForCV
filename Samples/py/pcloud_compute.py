@@ -112,9 +112,8 @@ def get_cam2world(path, sensor_poses):
     time_stamp = int(os.path.splitext(os.path.basename(path))[0])
     if time_stamp not in sensor_poses.keys():
         return None
-    world2cam = sensor_poses[time_stamp]    
-    cam2world = np.linalg.inv(world2cam)
-    return cam2world
+    world2cam = sensor_poses[time_stamp]
+    return np.linalg.inv(world2cam)
 
 
 def process_folder(args, cam):
@@ -129,12 +128,16 @@ def process_folder(args, cam):
         os.makedirs(output_folder)
 
     # Get camera projection info
-    bin_path = os.path.join(args.workspace_path, "%s_camera_space_projection.bin" % cam)
-    
+    bin_path = os.path.join(
+        args.workspace_path, f"{cam}_camera_space_projection.bin"
+    )
+
     # From frame to world coordinate system
     sensor_poses = None
     if not args.ignore_sensor_poses:
-        sensor_poses = read_sensor_poses(os.path.join(folder, cam + ".csv"), identity_camera_to_image=True)        
+        sensor_poses = read_sensor_poses(
+            os.path.join(folder, f"{cam}.csv"), identity_camera_to_image=True
+        )        
 
     # Get appropriate depth thresholds
     depth_range = LONG_THROW_RANGE if 'long' in cam else SHORT_THROW_RANGE
@@ -152,11 +155,14 @@ def process_folder(args, cam):
     points_merged = []
     us = vs = None
     for i_path, path in enumerate(depth_paths):
-        output_suffix = "_%s" % args.output_suffix if len(args.output_suffix) else ""
-        pcloud_output_path = os.path.join(output_folder, os.path.basename(path).replace(".pgm", "%s.obj" % output_suffix))
+        output_suffix = f"_{args.output_suffix}" if len(args.output_suffix) else ""
+        pcloud_output_path = os.path.join(
+            output_folder,
+            os.path.basename(path).replace(".pgm", f"{output_suffix}.obj"),
+        )
         print("Progress file (%d/%d): %s" %
               (i_path+1, len(depth_paths), pcloud_output_path))
-        
+
         # if file exist
         output_file_exist = os.path.exists(pcloud_output_path)
         if output_file_exist and use_cache:
@@ -167,13 +173,13 @@ def process_folder(args, cam):
                 us, vs = parse_projection_bin(bin_path, img.shape[1], img.shape[0])
             cam2world = get_cam2world(path, sensor_poses) if sensor_poses is not None else None
             points = get_points(img, us, vs, cam2world, depth_range)  
-            
+
         if merge_points:
             points_merged.extend(points)
-        
+
         if not output_file_exist or overwrite:
             save_obj(pcloud_output_path, points)
-        
+
     return points_merged
 
 
@@ -214,17 +220,17 @@ def main():
         camera = 'long_throw_depth'
 
     # process
-    print("Processing '%s' depth folder..." % camera)
+    print(f"Processing '{camera}' depth folder...")
     points = process_folder(args, camera)
     print('Done processing.')
-    
+
     # save output
     if args.merge_points:
         output_folder = os.path.join(args.output_path, camera)
-        output_filename = output_folder + ".obj"
-        print("Saving file with all points: %s" % output_filename)
+        output_filename = f"{output_folder}.obj"
+        print(f"Saving file with all points: {output_filename}")
         save_obj(output_filename, points)
-        
+
     print("Done.")
 
 if __name__ == "__main__":    
